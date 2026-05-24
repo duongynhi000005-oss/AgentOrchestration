@@ -36,6 +36,17 @@ class AgentSandbox:
     def get_path(self, agent_id: str) -> Optional[Path]:
         return self._sandboxes.get(agent_id)
 
+    def safe_child_path(self, agent_id: str, child: str) -> Path:
+        sandbox = self.get_path(agent_id)
+        if not sandbox:
+            raise ValueError(f"Unknown sandbox: {agent_id}")
+
+        candidate = (sandbox / child).resolve()
+        root = sandbox.resolve()
+        if root not in candidate.parents and candidate != root:
+            raise ValueError("Child path escapes sandbox root")
+        return candidate
+
     def apply_limits(self, agent_id: str, limits: ResourceLimits) -> None:
         try:
             resource.setrlimit(resource.RLIMIT_CPU, (limits.cpu_time, limits.cpu_time))
