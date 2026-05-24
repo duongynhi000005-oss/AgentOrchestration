@@ -22,6 +22,10 @@ class AgentSandbox:
     def create(self, agent_id: str, limits: Optional[ResourceLimits] = None) -> Path:
         sandbox_path = self.base_path / agent_id
         sandbox_path.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(sandbox_path, 0o700)
+        except OSError:
+            pass
         self._sandboxes[agent_id] = sandbox_path
         return sandbox_path
 
