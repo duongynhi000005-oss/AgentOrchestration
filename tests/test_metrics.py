@@ -17,6 +17,13 @@ class TestMetricsCollector:
         snapshot = self.metrics.snapshot()
         assert snapshot["gauges"]["memory.usage"] == 85.5
 
+    def test_gauge_rejects_non_finite_values(self):
+        with pytest.raises(ValueError):
+            self.metrics.gauge("memory.usage", float("nan"))
+
+        with pytest.raises(ValueError):
+            self.metrics.gauge("memory.usage", float("inf"))
+
     def test_observe(self):
         self.metrics.observe("response.time", 0.5)
         self.metrics.observe("response.time", 1.5)
