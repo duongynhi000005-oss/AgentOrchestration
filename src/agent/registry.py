@@ -17,6 +17,13 @@ class AgentStatus(Enum):
 
 
 class AgentRegistry:
+    _DISABLED_STATUSES = {
+        AgentStatus.PAUSED.value,
+        AgentStatus.STOPPED.value,
+        AgentStatus.FAILED.value,
+        AgentStatus.TERMINATED.value,
+    }
+
     def __init__(self, storage_backend: str = "memory"):
         self.storage_backend = storage_backend
         self._agents: Dict[str, Dict[str, Any]] = {}
@@ -49,6 +56,8 @@ class AgentRegistry:
         agents = self._agents.values()
         if status:
             agents = [a for a in agents if a["status"] == status.value]
+        else:
+            agents = [a for a in agents if a["status"] not in self._DISABLED_STATUSES]
         if group:
             agent_ids = self._index.get(group, [])
             agents = [a for a in agents if a["id"] in agent_ids]

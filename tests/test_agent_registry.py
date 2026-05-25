@@ -34,6 +34,22 @@ class TestAgentRegistry:
         workers = self.registry.list(group="worker")
         assert len(workers) == 1
 
+    def test_list_agents_skips_disabled_by_default(self):
+        active_id = self.registry.register("agent-1", "worker.processor")
+        disabled_id = self.registry.register("agent-2", "worker.processor")
+        self.registry.update_status(disabled_id, AgentStatus.STOPPED)
+
+        agents = self.registry.list(group="worker")
+        assert [a["id"] for a in agents] == [active_id]
+
+    def test_list_agents_can_filter_disabled_status(self):
+        agent_id = self.registry.register("agent-1", "worker.processor")
+        self.registry.update_status(agent_id, AgentStatus.FAILED)
+
+        agents = self.registry.list(status=AgentStatus.FAILED)
+        assert len(agents) == 1
+        assert agents[0]["id"] == agent_id
+
     def test_update_status(self):
         agent_id = self.registry.register("test-agent", "worker.processor")
         assert self.registry.update_status(agent_id, AgentStatus.RUNNING)
