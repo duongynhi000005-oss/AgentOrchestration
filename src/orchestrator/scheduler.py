@@ -33,9 +33,10 @@ class PriorityQueue:
 class TaskScheduler:
     def __init__(self):
         self._queues: Dict[str, PriorityQueue] = {}
-        self._scheduled: Dict[str, float] = {}
+        self._scheduled: Dict[str, Dict[str, Any]] = {}
         self._in_flight: Dict[str, Dict] = {}
         self._max_retries = 3
+        self._paused = False
 
     def enqueue(self, task: Dict, queue: str = "default", priority: int = 0) -> str:
         task_id = str(uuid4())
@@ -51,16 +52,39 @@ class TaskScheduler:
     def schedule(self, task: Dict, delay: float, queue: str = "default", priority: int = 0) -> str:
         task_id = str(uuid4())
         task["id"] = task_id
-        self._scheduled[task_id] = time.time() + delay
+        task["retries"] = 0
+        self._scheduled[task_id] = {
+            "run_at": time.time() + delay,
+            "task": task,
+            "queue": queue,
+            "priority": priority,
+        }
         return task_id
 
+    def pause(self) -> None:
+        self._paused = True
+
+    def resume(self) -> None:
+        self._paused = False
+
+    @property
+    def is_paused(self) -> bool:
+        return self._paused
+
     async def dequeue(self, queue: str = "default", timeout: float = 1.0) -> Optional[Dict]:
+        if self._paused:
+            return None
+
         now = time.time()
-        expired = [tid for tid, t in self._scheduled.items() if t <= now]
+        expired = [tid for tid, item in self._scheduled.items() if item["run_at"] <= now]
         for tid in expired:
-            task = self._scheduled.pop(tid)
-            if task:
-                self.enqueue(task, queue)
+            scheduled = self._scheduled.pop(tid)
+            if scheduled:
+                self.enqueue(
+                    scheduled["task"],
+                    queue=scheduled.get("queue", queue),
+                    priority=scheduled.get("priority", 0),
+                )
 
         if queue in self._queues and len(self._queues[queue]) > 0:
             task = self._queues[queue].pop()

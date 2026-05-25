@@ -36,6 +36,29 @@ class TestTaskScheduler:
         task = asyncio.run(self.scheduler.dequeue())
         assert self.scheduler.fail(task["id"])
 
+    def test_pause_blocks_dequeue_until_resume(self):
+        self.scheduler.enqueue({"type": "test"})
+        self.scheduler.pause()
+
+        import asyncio
+
+        assert asyncio.run(self.scheduler.dequeue()) is None
+
+        self.scheduler.resume()
+        task = asyncio.run(self.scheduler.dequeue())
+        assert task is not None
+        assert task["type"] == "test"
+
+    def test_schedule_preserves_queue_and_priority(self):
+        self.scheduler.schedule({"type": "scheduled-low"}, delay=0, queue="fast", priority=1)
+        self.scheduler.schedule({"type": "scheduled-high"}, delay=0, queue="fast", priority=5)
+
+        import asyncio
+
+        task = asyncio.run(self.scheduler.dequeue(queue="fast"))
+        assert task is not None
+        assert task["type"] == "scheduled-high"
+
 # 2019-01-09T19:07:03 update
 
 # 2019-02-18T12:30:02 update
