@@ -7,10 +7,20 @@ from src.common.config import Config
 from src.common.logging import configure_logging
 
 
-def cli():
+OUTPUT_MODES = ("text", "json")
+
+
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Agent Orchestrator CLI")
     parser.add_argument("--config", "-c", help="Path to config file")
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output")
+    parser.add_argument(
+        "--output",
+        "-o",
+        choices=OUTPUT_MODES,
+        default="text",
+        help="Output mode",
+    )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
@@ -26,7 +36,11 @@ def cli():
     logs_parser = subparsers.add_parser("logs", help="View agent logs")
     logs_parser.add_argument("agent_id", help="Agent ID")
     logs_parser.add_argument("--tail", "-t", type=int, default=50, help="Number of lines")
+    return parser
 
+
+def cli():
+    parser = build_parser()
     args = parser.parse_args()
 
     if args.verbose:
