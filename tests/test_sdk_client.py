@@ -58,3 +58,38 @@ def test_register_agent_trims_name_before_submit(monkeypatch):
         "agent_type": "worker.processor",
         "config": {"foo": "bar"},
     }
+
+def test_register_agent_rejects_non_mapping_config(monkeypatch):
+    called = False
+
+    def fake_urlopen(_req):
+        nonlocal called
+        called = True
+        return _FakeResponse({})
+
+    monkeypatch.setattr("src.sdk.client.urlopen", fake_urlopen)
+    client = OrchestratorClient(base_url="https://example.test", api_key="token")
+
+    with pytest.raises(ValueError, match="agent config must be a mapping"):
+        client.register_agent("test-agent", "worker.processor", ["bad"])
+
+    with pytest.raises(ValueError, match="agent config must be a mapping"):
+        client.register_agent("test-agent", "worker.processor", "bad")
+
+    assert called is False
+
+
+def test_register_agent_defaults_config_to_empty_object(monkeypatch):
+    captured = {}
+
+    def fake_urlopen(req):
+        captured["body"] = json.loads(req.data.decode())
+        return _FakeResponse({"agent_id": "agent-2", "status": "registered"})
+
+    monkeypatch.setattr("src.sdk.client.urlopen", fake_urlopen)
+    client = OrchestratorClient(base_url="https://example.test", api_key="token")
+
+    result = client.register_agent("test-agent", "worker.processor")
+
+    assert result == {"agent_id": "agent-2", "status": "registered"}
+    assert captured["body"]["config"] == {}

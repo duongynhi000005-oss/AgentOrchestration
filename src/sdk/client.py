@@ -2,6 +2,7 @@
 
 import json
 import os
+from collections.abc import Mapping
 from typing import Any, Dict, List, Optional
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
@@ -32,10 +33,12 @@ class OrchestratorClient:
         clean_name = name.strip()
         if not clean_name:
             raise ValueError("agent name is required")
+        if config is not None and not isinstance(config, Mapping):
+            raise ValueError("agent config must be a mapping")
         return self._request("POST", "/agents", {
             "name": clean_name,
             "agent_type": agent_type,
-            "config": config or {},
+            "config": dict(config) if config is not None else {},
         })
 
     def list_agents(self, status: str = None) -> Dict:
