@@ -2,7 +2,7 @@
 
 import os
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterator, Optional
 
 
 class Config:
@@ -20,8 +20,36 @@ class Config:
         prefix = "AO_"
         for key, value in os.environ.items():
             if key.startswith(prefix):
-                config_key = key[len(prefix):].lower().replace("_", ".")
+                config_key = self._resolve_env_key(key[len(prefix):])
                 self._set_nested(config_key, value)
+
+    def _resolve_env_key(self, env_key: str) -> str:
+        lowered = env_key.lower()
+        known_paths = list(self._iter_paths(self._data))
+        alias_matches = [
+            path for path in known_paths
+            if env_key == path.upper().replace("_", "__").replace(".", "_")
+        ]
+        if len(alias_matches) == 1:
+            return alias_matches[0]
+
+        legacy_matches = [
+            path for path in known_paths
+            if env_key == path.upper().replace(".", "_")
+        ]
+        if len(legacy_matches) == 1:
+            return legacy_matches[0]
+
+        placeholder = "\0"
+        return lowered.replace("__", placeholder).replace("_", ".").replace(placeholder, "_")
+
+    def _iter_paths(self, data: Dict[str, Any], prefix: str = "") -> Iterator[str]:
+        for key, value in data.items():
+            path = f"{prefix}.{key}" if prefix else key
+            if isinstance(value, dict) and value:
+                yield from self._iter_paths(value, path)
+            else:
+                yield path
 
     def _set_nested(self, key: str, value: Any) -> None:
         parts = key.split(".")

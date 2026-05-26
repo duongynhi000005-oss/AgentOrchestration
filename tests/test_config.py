@@ -32,6 +32,17 @@ class TestConfig:
         assert data["key1"] == "value1"
         assert data["key2"] == "value2"
 
+    def test_env_override_matches_literal_underscore_keys(self, monkeypatch, tmp_path):
+        config_file = tmp_path / "config.json"
+        config_file.write_text('{"api_url": "https://old.example", "database": {"host": "localhost"}}')
+        monkeypatch.setenv("AO_API_URL", "https://new.example")
+        monkeypatch.setenv("AO_DATABASE_HOST", "db.internal")
+
+        config = Config(str(config_file))
+
+        assert config.get("api_url") == "https://new.example"
+        assert config.get("database.host") == "db.internal"
+
 # 2019-02-01T18:58:35 update
 
 # 2019-07-31T13:45:15 update
