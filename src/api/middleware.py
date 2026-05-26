@@ -1,7 +1,9 @@
 """API middleware components."""
 
-import time
+import hmac
 import logging
+import os
+import time
 from typing import Callable
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -10,11 +12,23 @@ from starlette.responses import Response
 logger = logging.getLogger(__name__)
 
 
+def _expected_api_key() -> str:
+    return os.getenv("AO_API_KEY", "")
+
+
+def _bearer_token(request: Request) -> str:
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return ""
+    return auth.removeprefix("Bearer ").strip()
+
+
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         if request.url.path.startswith("/api/v2") and request.url.path != "/api/v2/auth/token":
-            token = request.headers.get("Authorization", "")
-            if not token.startswith("Bearer "):
+            token = _bearer_token(request)
+            expected = _expected_api_key()
+            if not token or not expected or not hmac.compare_digest(token, expected):
                 return Response(status_code=401, content="Unauthorized")
         return await call_next(request)
 
