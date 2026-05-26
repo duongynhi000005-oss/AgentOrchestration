@@ -17,6 +17,10 @@ class TestMetricsCollector:
         snapshot = self.metrics.snapshot()
         assert snapshot["gauges"]["memory.usage"] == 85.5
 
+    def test_gauge_rejects_non_numeric_values(self):
+        with pytest.raises(TypeError, match="numeric"):
+            self.metrics.gauge("memory.usage", "85.5")
+
     def test_observe(self):
         self.metrics.observe("response.time", 0.5)
         self.metrics.observe("response.time", 1.5)

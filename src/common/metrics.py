@@ -1,6 +1,7 @@
 """Metrics collection and reporting."""
 
 import time
+from numbers import Real
 from collections import defaultdict
 from typing import Dict, List
 from threading import Lock
@@ -19,6 +20,8 @@ class MetricsCollector:
             self._counters[metric] += value
 
     def gauge(self, metric: str, value: float) -> None:
+        if not isinstance(value, Real) or isinstance(value, bool):
+            raise TypeError("gauge value must be numeric")
         with self._lock:
             self._gauges[metric] = value
 
@@ -34,7 +37,7 @@ class MetricsCollector:
         with self._lock:
             if metric in self._timers:
                 duration = time.time() - self._timers.pop(metric)
-                self.observe(metric, duration)
+                self._histograms[metric].append(duration)
                 return duration
         return 0.0
 
