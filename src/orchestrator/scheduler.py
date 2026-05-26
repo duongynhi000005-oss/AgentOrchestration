@@ -33,34 +33,70 @@ class PriorityQueue:
 class TaskScheduler:
     def __init__(self):
         self._queues: Dict[str, PriorityQueue] = {}
-        self._scheduled: Dict[str, float] = {}
+        self._scheduled: Dict[str, Dict[str, Any]] = {}
         self._in_flight: Dict[str, Dict] = {}
+        self._idempotency_index: Dict[str, str] = {}
         self._max_retries = 3
 
+    def _track_idempotency(self, task: Dict) -> None:
+        key = task.get("idempotency_key")
+        if key:
+            self._idempotency_index[key] = task["id"]
+
+    def _dedupe_task_id(self, task: Dict) -> Optional[str]:
+        key = task.get("idempotency_key")
+        if not key:
+            return None
+        return self._idempotency_index.get(key)
+
+    def _enqueue_existing(self, task: Dict, queue: str = "default", priority: int = 0) -> str:
+        if queue not in self._queues:
+            self._queues[queue] = PriorityQueue()
+        task["priority"] = priority
+        self._queues[queue].push(task, priority)
+        self._track_idempotency(task)
+        return task["id"]
+
     def enqueue(self, task: Dict, queue: str = "default", priority: int = 0) -> str:
+        existing = self._dedupe_task_id(task)
+        if existing:
+            return existing
+
         task_id = str(uuid4())
         task["id"] = task_id
         task["enqueued_at"] = time.time()
-        task["retries"] = 0
-
-        if queue not in self._queues:
-            self._queues[queue] = PriorityQueue()
-        self._queues[queue].push(task, priority)
-        return task_id
+        task.setdefault("retries", 0)
+        return self._enqueue_existing(task, queue=queue, priority=priority)
 
     def schedule(self, task: Dict, delay: float, queue: str = "default", priority: int = 0) -> str:
+        existing = self._dedupe_task_id(task)
+        if existing:
+            return existing
+
         task_id = str(uuid4())
         task["id"] = task_id
-        self._scheduled[task_id] = time.time() + delay
+        task["scheduled_at"] = time.time()
+        task.setdefault("retries", 0)
+        self._scheduled[task_id] = {
+            "run_at": time.time() + delay,
+            "task": task,
+            "queue": queue,
+            "priority": priority,
+        }
+        self._track_idempotency(task)
         return task_id
 
     async def dequeue(self, queue: str = "default", timeout: float = 1.0) -> Optional[Dict]:
         now = time.time()
-        expired = [tid for tid, t in self._scheduled.items() if t <= now]
+        expired = [tid for tid, data in self._scheduled.items() if data["run_at"] <= now]
         for tid in expired:
-            task = self._scheduled.pop(tid)
-            if task:
-                self.enqueue(task, queue)
+            scheduled = self._scheduled.pop(tid, None)
+            if scheduled:
+                self._enqueue_existing(
+                    scheduled["task"],
+                    queue=scheduled["queue"],
+                    priority=scheduled["priority"],
+                )
 
         if queue in self._queues and len(self._queues[queue]) > 0:
             task = self._queues[queue].pop()
@@ -70,15 +106,24 @@ class TaskScheduler:
         return None
 
     def complete(self, task_id: str) -> bool:
-        return self._in_flight.pop(task_id, None) is not None
+        task = self._in_flight.pop(task_id, None)
+        if not task:
+            return False
+        key = task.get("idempotency_key")
+        if key and self._idempotency_index.get(key) == task_id:
+            self._idempotency_index.pop(key, None)
+        return True
 
     def fail(self, task_id: str, queue: str = "default") -> bool:
         task = self._in_flight.pop(task_id, None)
         if task:
             task["retries"] += 1
             if task["retries"] < self._max_retries:
-                self.enqueue(task, queue, priority=task.get("priority", 0))
+                self._enqueue_existing(task, queue, priority=task.get("priority", 0))
                 return True
+            key = task.get("idempotency_key")
+            if key and self._idempotency_index.get(key) == task_id:
+                self._idempotency_index.pop(key, None)
         return False
 
 # 2019-04-25T08:37:12 update

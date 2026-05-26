@@ -36,6 +36,38 @@ class TestTaskScheduler:
         task = asyncio.run(self.scheduler.dequeue())
         assert self.scheduler.fail(task["id"])
 
+    def test_schedule_deduplicates_idempotent_tasks(self):
+        import asyncio
+
+        first_id = self.scheduler.schedule(
+            {"type": "test", "idempotency_key": "clock-skew-1"},
+            delay=0,
+        )
+        second_id = self.scheduler.schedule(
+            {"type": "test", "idempotency_key": "clock-skew-1"},
+            delay=0,
+        )
+
+        assert first_id == second_id
+
+        task = asyncio.run(self.scheduler.dequeue())
+        assert task is not None
+        assert task["id"] == first_id
+        assert task["idempotency_key"] == "clock-skew-1"
+
+    def test_duplicate_retry_keeps_single_terminal_task(self):
+        import asyncio
+
+        task_id = self.scheduler.enqueue(
+            {"type": "test", "idempotency_key": "retry-1"},
+        )
+        task = asyncio.run(self.scheduler.dequeue())
+        assert task["id"] == task_id
+        assert self.scheduler.fail(task_id)
+        retry = asyncio.run(self.scheduler.dequeue())
+        assert retry["id"] == task_id
+        assert self.scheduler.complete(task_id)
+
 # 2019-01-09T19:07:03 update
 
 # 2019-02-18T12:30:02 update
